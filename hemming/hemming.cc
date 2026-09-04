@@ -1,5 +1,4 @@
 #include <cassert>
-#include <cmath>
 #include <cstdint>
 
 #include <iostream>
@@ -16,7 +15,7 @@ constexpr int32_t cnt_2(const int32_t n) {
 
 constexpr bool is_2(int32_t x) { return (x > 0) && (x & (x - 1)) == 0; }
 
-std::vector<int32_t> code_message(const std::vector<int32_t>& data) {
+std::vector<int32_t> code(const std::vector<int32_t>& data) {
   size_t n = data.size();
   int32_t rest = cnt_2(n);
   int32_t csn = n + rest;
@@ -45,13 +44,11 @@ std::vector<int32_t> code_message(const std::vector<int32_t>& data) {
   return {cs.begin() + 1, cs.end()};
 }
 
-int32_t decode_message(const std::vector<int32_t>& coded_data) {
+// return error pos in 1-index
+int32_t auto_fix_message(std::vector<int32_t>& coded_data) {
   size_t n = coded_data.size();
 
-  int32_t cnt = 0;
-  while ((1 << cnt) <= n) {
-    ++cnt;
-  }
+  int32_t cnt = cnt_2(n) - 1;
 
   int32_t error_pos = 0;
 
@@ -74,44 +71,87 @@ int32_t decode_message(const std::vector<int32_t>& coded_data) {
     }
   }
 
+  if (error_pos != 0)
+    coded_data[error_pos - 1] = !coded_data[error_pos - 1];
+
   return error_pos;
 }
 
+
+std::vector<int> decode(const std::vector<int>& coded_data) {
+  int n = coded_data.size();
+  int cnt2 = cnt_2(n) - 1;
+  std::vector<int> data;
+  data.reserve(n - cnt2);
+
+  for (int i = 0; i < n; ++i) {
+    const int pos = i + 1; 
+
+    if (is_2(pos))
+      continue;
+
+    data.emplace_back(coded_data[i]);
+  }
+
+  return data;
+}
+
+
+// emulate sinding message
 std::vector<int> send_splited_message(const std::vector<int>& ms,
                                       int block_size = 4) {
   int n = ms.size();
-  std::vector<int> errors(std::ceil(ms.size() / 4.0), 0);
+  std::vector<int> received_message;
+  received_message.reserve(n);
 
-  int error_i = 0;
   for (auto chunk : ms | std::views::chunk(block_size)) {
 
-    auto cm = code_message(chunk | std::ranges::to<std::vector<int>>());
+    auto cm = code(chunk | std::ranges::to<std::vector<int>>());
 
-    cm[2] = 0;
+    int error = auto_fix_message(cm);
 
-    errors[error_i++] = decode_message(cm);
+    auto received_part = decode(cm);
+
+    received_message.insert(received_message.end(), received_part.begin(), received_part.end());
   }
 
-  return errors;
+  return received_message;
 }
 
 int32_t main() {
   std::vector<int32_t> v = {1, 0, 0, 1, 0, 1, 1, 1, 0, 0, 1};
-  // auto ms = code_message(v);
-  //
-  // std::cout << "Coded message:\n";
-  // for (auto a : ms) {
-  //   std::cout << a << ' ';
-  // }
-  // std::cout << '\n';
-  //
-  // std::vector<int32_t> m{0, 0, 1, 1, 0, 0, 1, 0, 0, 1, 1, 1, 0, 0, 1};
-  //
-  // std::cout << "Error index: " << decode_message(m) << '\n';
 
-  auto errors = send_splited_message(v);
-
-  for (int a : errors) {
+  for (auto a : v) {
     std::cout << a << ' ';
   }
+  std::cout << '\n';
+
+  auto ms = code(v);
+  auto res = send_splited_message(v);
+
+  for (auto a : res) {
+    std::cout << a << ' ';
+  }
+  std::cout << '\n';
+
+#if 0
+  std::vector<int32_t> m{0, 1, 1, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1};
+
+  std::cout << "Error index: " << auto_fix_message(m) << '\n';
+
+  for (int a : m) {
+    std::cout << a << ' ';
+  }
+  std::cout << '\n';
+
+  auto decoded = decode(m);
+
+  for (int a : v) {
+    std::cout << a << ' ';
+  }
+  std::cout << '\n';
+  for (int a : decoded) {
+    std::cout << a << ' ';
+  }
+#endif
 }
