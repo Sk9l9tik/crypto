@@ -109,6 +109,9 @@ std::vector<int> send_splited_message(const std::vector<int>& ms,
     auto cm = code(chunk | std::ranges::to<std::vector<int>>());
 
     // sending
+    #ifdef BROKE 
+    cm[2] = 0;
+    #endif
 
     int error = auto_fix_message(cm);
 
@@ -128,7 +131,6 @@ int32_t main() {
   }
   std::cout << '\n';
 
-  auto ms = code(v);
   auto res = send_splited_message(v);
 
   for (auto a : res) {
