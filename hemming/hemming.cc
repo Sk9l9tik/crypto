@@ -97,7 +97,7 @@ std::vector<int> decode(const std::vector<int>& coded_data) {
 }
 
 
-// emulate sinding message
+// emulate sending message
 std::vector<int> send_splited_message(const std::vector<int>& ms,
                                       int block_size = 4) {
   int n = ms.size();
@@ -107,6 +107,8 @@ std::vector<int> send_splited_message(const std::vector<int>& ms,
   for (auto chunk : ms | std::views::chunk(block_size)) {
 
     auto cm = code(chunk | std::ranges::to<std::vector<int>>());
+
+    // sending
 
     int error = auto_fix_message(cm);
 
