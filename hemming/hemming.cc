@@ -109,7 +109,7 @@ std::vector<int> send_splited_message(const std::vector<int>& ms,
     auto cm = code(chunk | std::ranges::to<std::vector<int>>());
 
     // sending
-    #ifdef BROKE 
+    #ifndef BROKE 
     cm[2] = 0;
     #endif
 
