@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <numeric>
+#include <optional>
 #include <random>
 #include <vector>
 
@@ -48,38 +49,58 @@ constexpr int32_t primes[] = {
     19979, 19991, 19993, 19997,
 };
 
-struct key_pair {
-  int64_t fst;
-  int64_t snd;
+struct key {
+  uint64_t exp;
+  uint64_t mod;
 };
 
-// ax + by = gcd(a, b)
-int64_t extended_gcd(int64_t a, int64_t b, int64_t &x, int64_t &y) {
-  if (b == 0) {
-    x = 1;
-    y = 0;
-    return a;
+struct rsa_key {
+  key public_key;
+  key private_key;
+};
+
+// return gcd(a, b) and set x, y: ax + by = gcd(a, b)
+[[nodiscard]]
+constexpr std::int64_t extended_gcd(std::int64_t a, std::int64_t b,
+                                    std::int64_t& x, std::int64_t& y) noexcept {
+  std::int64_t old_r = a, r = b;
+  std::int64_t old_s = 1, s = 0;
+  std::int64_t old_t = 0, t = 1;
+
+  while (r != 0) {
+    const std::int64_t quot = old_r / r;
+
+    std::int64_t tmp = old_r - quot * r;
+    old_r = r;
+    r = tmp;
+
+    tmp = old_s - quot * s;
+    old_s = s;
+    s = tmp;
+
+    tmp = old_t - quot * t;
+    old_t = t;
+    t = tmp;
   }
 
-  int64_t x1, y1;
-  int64_t g = extended_gcd(b, a % b, x1, y1);
-
-  x = y1;
-  y = x1 - (a / b) * y1;
-
-  return g;
+  x = old_s;
+  y = old_t;
+  return old_r;
 }
 
-int64_t mod_inverse(int64_t d, int64_t phi) {
-  int64_t x, y;
+[[nodiscard]]
+constexpr std::optional<size_t> mod_inverse(int64_t d, int64_t phi) {
+  int64_t x{}, y{};
 
   if (extended_gcd(d, phi, x, y) != 1)
-    return -1;
+    return std::nullopt;
 
   return (x % phi + phi) % phi;
 }
 
-uint64_t mod_pow(uint64_t b, uint64_t n, uint64_t mod) {
+// prerecondition: 1 < mod <= 2^32, so that res * b never overflows uint64_t.
+[[nodiscard]]
+constexpr uint64_t mod_pow(uint64_t b, uint64_t n, uint64_t mod) {
   uint64_t res = 1;
   while (n > 0) {
     if (n & 1) {
@@ -93,52 +114,65 @@ uint64_t mod_pow(uint64_t b, uint64_t n, uint64_t mod) {
 }
 } // namespace utils
 
+
+
 [[nodiscard]]
-std::vector<uint64_t> code(const std::string &s, utils::key_pair open) {
+utils::rsa_key generate() {
+  std::random_device dev;
+  std::uniform_int_distribution<std::size_t> pick(0, std::size(utils::primes) - 1);
+
+  for (;;) {
+    const std::int64_t p = utils::primes[pick(dev)];
+    std::int64_t q = utils::primes[pick(dev)];
+    while (q == p)
+      q = utils::primes[pick(dev)];
+
+    const std::int64_t n = p * q; // < 2^32 by construction
+    const std::int64_t lambda = std::lcm(p - 1, q - 1);
+
+    constexpr std::int64_t e = 65537;
+    if (std::gcd(e, lambda) != 1)
+      continue;
+
+    const auto d = utils::mod_inverse(e, lambda);
+    if (!d || *d <= 1 || *d == e)
+      continue;
+
+    assert(n > 0xFF);
+    return utils::rsa_key{
+        .public_key = utils::key{
+                                 static_cast<std::uint64_t>(e),
+                                 static_cast<std::uint64_t>(n)},
+        .private_key = utils::key{
+                                 static_cast<std::uint64_t>(*d),
+                                 static_cast<std::uint64_t>(n)}};
+  }
+}
+
+
+[[nodiscard]]
+std::vector<uint64_t> code(const std::string& s, utils::key open) {
   std::vector<uint64_t> code;
   code.reserve(s.length());
 
   for (auto b : s) {
     code.emplace_back(
-        utils::mod_pow(static_cast<uint64_t>(b), open.fst, open.snd));
+        utils::mod_pow(static_cast<uint64_t>(b), open.exp, open.mod));
   }
 
   return code;
 }
 
 [[nodiscard]]
-std::string decode(const std::vector<uint64_t> &code, utils::key_pair close) {
+std::string decode(const std::vector<uint64_t>& code, utils::key close) {
   std::string msg;
   msg.reserve(code.size());
   for (uint64_t a : code) {
-    msg += static_cast<char>(utils::mod_pow(a, close.fst, close.snd));
+    msg += static_cast<char>(utils::mod_pow(a, close.exp, close.mod));
   }
   return msg;
 }
 
-[[nodiscard]]
-std::pair<utils::key_pair, utils::key_pair> generate() {
-  std::random_device dev;
-  std::mt19937 rng(dev());
-  std::uniform_int_distribution<> dist(0,
-                                       sizeof(utils::primes) / sizeof(int32_t));
-
-  int64_t p{utils::primes[dist(rng)]}, q{utils::primes[dist(rng)]};
-  std::cout << p << ' ' << q << '\n';
-
-  int64_t n = p * q;
-
-  int64_t phi = (p - 1) * (q - 1);
-
-  int64_t d{2};
-  int64_t e{};
-  while ((std::gcd(d, phi) != 1 || e == d) && e != -1) {
-    d = dist(rng);
-    e = utils::mod_inverse(d, phi);
-  }
-
-  return {{e, n}, {d, n}};
-}
 
 int main() {
 
@@ -149,4 +183,7 @@ int main() {
   auto ms = code(message, open);
 
   auto msg = decode(ms, close);
+
+  assert(msg == message);
+  std::cout << msg;
 }
