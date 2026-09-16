@@ -88,6 +88,7 @@ constexpr std::int64_t extended_gcd(std::int64_t a, std::int64_t b,
   return old_r;
 }
 
+// returns d^{-1} % phi
 [[nodiscard]]
 constexpr std::optional<size_t> mod_inverse(int64_t d, int64_t phi) {
   int64_t x{}, y{};
